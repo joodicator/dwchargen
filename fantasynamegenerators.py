@@ -71,11 +71,20 @@ class NameGenerationException(Exception):
             if debug_file is not None else '',
             inner_exception))
 
-def random_name(type):
-    name, subtype = random_name_subtype(type)
+def random_name(*types):
+    name, subtype = random_name_subtype(*types)
     return name
 
-def random_name_subtype(type):
+def random_name_gender(*types):
+    (name, subtype) = random_name_subtype(*types)
+    if subtype == 'amazon':
+        subtype = 'female'
+    if subtype not in ('male', 'female'):
+        subtype = None
+    return (name, subtype)
+
+def random_name_subtype(*types):
+    type = random.choice(types)
     exceptions = []
     for separator in '-', '_':
         try:

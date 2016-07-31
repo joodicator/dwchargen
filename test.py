@@ -3,4 +3,6 @@
 import dungeon_galaxy
 
 while True:
-    dungeon_galaxy.DG_Char.new_random().print_lines(); print('---')
+    dungeon_galaxy.Char.new_random().print_lines()
+    print('---')
+    raw_input()
