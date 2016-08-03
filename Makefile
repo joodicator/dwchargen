@@ -3,6 +3,5 @@ all:
 
 .PHONY: clean
 clean:
-	rm *.pyc
-	rm ghostdriver.log
-	rm fantasynamegenerators.error.htm
+	rm -f ghostdriver.log
+	rm -f fantasynamegenerators.error.htm

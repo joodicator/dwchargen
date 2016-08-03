@@ -3,8 +3,10 @@ from __future__ import print_function
 import threading
 import traceback
 import weakref
+import atexit
 import random
 import string
+import time
 import sys
 import re
 
@@ -26,40 +28,77 @@ class Driver(selenium.webdriver.PhantomJS):
             id(self), id(self.pool), action))
 
 class DriverPool(object):
-    __slots__ = 'drivers', 'rlock', 'remove_driver_cond', 'driver_cache_s', 'debug'
+    __slots__ = ('drivers', 'rlock', 'remove_driver_cond', 'destroyed',
+                 'driver_cache_s', 'debug', '__weakref__')
+
     def __init__(self, driver_cache_s=300, debug=False):
         self.drivers = []
         self.rlock = threading.RLock()
         self.remove_driver_cond = threading.Condition(self.rlock)
+        self.destroyed = False
         self.driver_cache_s = driver_cache_s
         self.debug = debug
+
+        threading.Thread(
+            name='DriverPool.run_pool(%r)' % self,
+            target=self.run_pool,
+            args=(threading.current_thread(),)
+        ).start()
+
     def get_driver(self):
         driver = None
         with self.rlock:
+            if self.destroyed: raise Exception(
+                'This driver pool has been destroyed and is unusable.')
             if len(self.drivers):
                 driver = self.drivers.pop(0)
                 self.remove_driver_cond.notify_all()
                 if self.debug: driver.log('removed')
             else:
                 driver = Driver(self)
-                if self.debug: driver.log('created')
+                if self.debug: driver.log('created and removed')
         return driver
+
     def release_driver(self, driver):
         with self.rlock:
-            if self.debug: driver.log('released')
+            if self.destroyed: return
+            if self.debug: driver.log('returned')
             self.drivers.append(driver)
-            thread = threading.Thread(target=self.destroy_driver, args=(driver,))
-            thread.daemon = True
-            thread.start()
+            threading.Thread(
+                name='DriverPool.destroy_driver(%r)' % driver,
+                target=self.destroy_driver,
+                args=(driver,)
+            ).start()
+
     def destroy_driver(self, driver):
+        start = time.time()
+        remain = self.driver_cache_s
         with self.rlock:
-            self.remove_driver_cond.wait(self.driver_cache_s)
-            if driver not in self.drivers: return
+            remove_driver_cond = self.remove_driver_cond
+            while remain > 0:
+                if self.destroyed or driver not in self.drivers: return
+                remain = self.driver_cache_s - (time.time() - start)
+                self, driver = weakref.ref(self), weakref.ref(driver)
+                remove_driver_cond.wait(remain)
+                self, driver = self(), driver()
+                if self is None or driver is None: return
             self.drivers.remove(driver)
             if self.debug: driver.log('destroyed')
         driver.quit()
 
-pool = DriverPool()
+    def run_pool(self, parent_thread):
+        self = weakref.ref(self)
+        parent_thread.join()
+        self = self()
+        if self is None: return
+        with self.rlock:
+            if self.debug: print(
+                '*** Driver pool %x destroyed.' % id(self),
+                file=sys.stderr)
+            self.destroyed = True
+            self.remove_driver_cond.notify_all()
+
+pool = DriverPool(debug='--debug' in sys.argv[1:])
 
 class NameGenerationException(Exception):
     def __init__(self, type, url, debug_file, driver, inner_exception):
