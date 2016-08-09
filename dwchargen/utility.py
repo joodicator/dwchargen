@@ -1,9 +1,10 @@
 import random
+import abc
 
 #-------------------------------------------------------------------------------
-class RegistryClass(type):
+class RegistryClass(abc.ABCMeta):
     def __new__(mcls, name, bases, dict):
-        cls = type.__new__(mcls, name, bases, dict)
+        cls = super(mcls, RegistryClass).__new__(mcls, name, bases, dict)
         if not getattr(cls, 'registry_ignore', False):
             if hasattr(cls, 'classes') and AbstractSubRegistry not in bases:
                 cls.classes.append(cls)
@@ -13,6 +14,7 @@ class RegistryClass(type):
 
 class AbstractSubRegistry(object):
     __metaclass__ = RegistryClass
+
 class Registry(object):
     __metaclass__ = RegistryClass
 

@@ -1,11 +1,13 @@
+from itertools import *
+from UserList import UserList
+
 import utility as util
 
 #===============================================================================
 class Char(util.Random):
-    __slots__ = (
-        'name', 'class_', 'alignment_move', 'race', 'gender', 'abilities',
-        'max_hp', 'max_load', 'base_damage',
-        'level', 'inventory', 'armour')
+#    __slots__ = (
+#        'name', 'class_', 'alignment_move', 'race', 'gender', 'abilities',
+#        'max_hp', 'max_load', 'base_damage', 'level', 'inventory', 'armour')
 
     def __init__(self):
         self.max_hp = 0
@@ -36,7 +38,7 @@ class Char(util.Random):
         return sum(item.tags.get('armour', 0) for item in self.inventory)
 
 class Damage(object):
-    __slots__ = 'sides', 'add'
+#    __slots__ = 'sides', 'add'
     def __init__(self, sides=0, add=0):
         self.sides = sides
         self.add = add
@@ -52,7 +54,8 @@ class Damage(object):
             '%+d' % self.add != 0 if self.add else '')
 
 class Item(object):
-    __slots__ = 'name', 'quantity', 'tags'
+#    __slots__ = 'name', 'quantity', 'tags'
+    name = None
     def __init__(self, *atags, **ktags):
         if 'name' in ktags:
             self.name = ktags.pop('name')
@@ -60,27 +63,107 @@ class Item(object):
             self.quantity = ktags.pop('quantity')
         elif not hasattr(self, 'quantity'):
             self.quantity = 1
-        if getattr(self, 'tags', None) is None:
-            self.tags = dict()
+        self.tags = getattr(self, 'tags', dict())
         self.tags.update((tag, True) for tag in atags)
         self.tags.update(ktags)
+
     def summarise(self):
         return '%s%s%s' % (
             '%d * ' % self.quantity if self.quantity != 1 else '',
             '%d/%d ' % self.tags['uses'] if 'uses' in self.tags else '',
             self.name)
 
-class Inventory(list):
-    def __init__(self, *args, **kwds):
-        super(Inventory, self).__init__(args, **kwds)
+    def merge(self, other):
+        if (isinstance(other, Item)
+        and other.name == self.name and other.tags == self.tags):
+            quantity = self.quantity + other.quantity
+            return Item(name=self.name, quantity=quantity, **self.tags)
+        else:
+            return None
+
+    def __mul__(self, other):
+        if isinstance(other, numbers.Integral):
+            return self(name=self.name, quantity=self.quantity*other, **self.tags)
+        else:
+            return NotImplemented
+
+    def __repr__(self):
+        return '%s%s(%s)' % (
+            '' if self.quantity == 1 else '%d * ' % self.quantity,
+            self.__class__.__name__,
+            ', '.join('%s=%r' % i for i in chain(
+                [('name', self.name)] if self.name else [],
+                self.tags.iteritems())))
+
+class Inventory(UserList):
+    def __init__(self, *args):
+        if len(args) == 1 and isinstance(args[0], list):
+            self.data = args[0]
+        else:
+            self.data = list(args)
+        self.compact()
+
     @property
     def load_used(self):
         return sum(item.tags.get('weight')*item.quantity for item in self)
+
     def summarise(self):
         return ', '.join(item.summarise() for item in self)
 
+    def __setitem__(self, i, value):
+        result = super(Inventory, self).__setitem__(i, value)
+        self.compact(i, i+1)
+        return result
+
+    def __setslice__(self, i, j, values):
+        result = super(Inventory, self).__setslice__(i, j, values)
+        self.compact(i, i + len(values))
+        return result
+
+    def __iadd__(self, other):
+        result = super(Inventory, self).__iadd__(other)
+        self.compact(-len(other))
+        return result
+
+    def __imul__(self, n):
+        for i in range(len(self)):
+            self[i] *= n
+        return result
+
+    def append(self, value):
+        result = super(Inventory, self).append(value)
+        self.compact(-1)
+        return result
+
+    def extend(self, values):
+        result = super(Inventory, self).extend(values)
+        self.compact(-len(values))
+        return result
+
+    def insert(self, i, value):
+        result = super(Inventory, self).insert(i, value)
+        self.compact(i, i+1)
+        return result
+
+    def compact(self, start=None, end=None):
+        length = len(self)
+        start = 0 if start is None else length+start if start<0 else start
+        end = length if end is None else length+end if end<0 else end
+
+        for i in reversed(range(start, end)):
+            for j in chain(range(i), range(i+1, length)):
+                merged = self[i].merge(self[j])
+                if merged is not None:
+                    super(Inventory, self).__setitem__(min(i,j), merged)
+                    del self[max(i,j)]
+                    length -= 1
+                    break
+
+    def __repr__(self):
+        return 'Inventory(%s)' % ', '.join(repr(i) for i in self)
+
 class Abilities(object):
-    __slots__ = 'scores', 'modifiers'
+#    __slots__ = 'scores', 'modifiers'
     ability_names = (
         'strength', 'dexterity', 'constitution',
         'intelligence', 'wisdom', 'charisma')
@@ -113,10 +196,11 @@ class Char_Attr(util.Random):
         pass
 
 class Class(Char_Attr):
-    __slots__ = 'name',
+#    __slots__ = 'name',
+    pass
 
 class Race(Char_Attr):
-    __slots__ = 'name', 'racial_move'
+#    __slots__ = 'name', 'racial_move'
     def summarise(self, char):
         if self.name == self.racial_move.name:
             suffix = self.racial_move.summarise_parenthetical()
@@ -128,7 +212,7 @@ class Race(Char_Attr):
             ' -- %s' % suffix if suffix is not None else '')
 
 class Move(util.Random):
-    __slots__ = 'name', 'description'
+#    __slots__ = 'name', 'description'
     def __init__(self, name=None, description=None):
         if name is not None:
             self.name = name
@@ -141,7 +225,7 @@ class Move(util.Random):
         return summary
 
 class Move_Class(Move):
-    __slots__ = 'class_'
+#    __slots__ = 'class_'
     @classmethod
     def eligible(self, char):
         return True

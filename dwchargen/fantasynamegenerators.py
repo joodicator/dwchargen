@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import threading
 import traceback
+import httplib
 import weakref
 import atexit
 import random
@@ -31,7 +32,7 @@ class DriverPool(object):
     __slots__ = ('drivers', 'rlock', 'remove_driver_cond', 'destroyed',
                  'driver_cache_s', 'debug', '__weakref__')
 
-    def __init__(self, driver_cache_s=300, debug=False):
+    def __init__(self, driver_cache_s=60, debug=False):
         self.drivers = []
         self.rlock = threading.RLock()
         self.remove_driver_cond = threading.Condition(self.rlock)
@@ -76,15 +77,18 @@ class DriverPool(object):
         with self.rlock:
             remove_driver_cond = self.remove_driver_cond
             while remain > 0:
-                if self.destroyed or driver not in self.drivers: return
+                if driver not in self.drivers: return
+                if self.destroyed: break
                 remain = self.driver_cache_s - (time.time() - start)
                 self, driver = weakref.ref(self), weakref.ref(driver)
                 remove_driver_cond.wait(remain)
                 self, driver = self(), driver()
-                if self is None or driver is None: return
-            self.drivers.remove(driver)
+                if self is None or driver is None: break
+            if self is not None and driver is not None:
+                self.drivers.remove(driver)
+        if driver is not None:
             if self.debug: driver.log('destroyed')
-        driver.quit()
+            driver.quit()
 
     def run_pool(self, parent_thread):
         self = weakref.ref(self)
@@ -101,11 +105,11 @@ class DriverPool(object):
 pool = DriverPool(debug='--debug' in sys.argv[1:])
 
 class NameGenerationException(Exception):
-    def __init__(self, type, url, debug_file, driver, inner_exception):
+    def __init__(self, main_type, url, debug_file, driver, inner_exception):
         super(NameGenerationException, self).__init__(
         'Error retrieving names of type "%s" from <%s>.%s '
-        'Original exception: %s' % (
-            type, url,
+        'Original exception: %r' % (
+            main_type, url,
             ' Response saved to %s.' % debug_file
             if debug_file is not None else '',
             inner_exception))
@@ -123,25 +127,25 @@ def random_name_gender(*types):
     return (name, subtype)
 
 def random_name_subtype(*types):
-    type = random.choice(types)
+    main_type = random.choice(types)
     exceptions = []
     for separator in '-', '_':
         try:
             return _random_name_subtype(
                 'http://fantasynamegenerators.com/%s%snames.php'
-                % (re.sub(r' ', separator, type.lower()), separator), type)
+                % (re.sub(r' ', separator, main_type.lower()), separator), main_type)
         except NameGenerationException as e:
+            e.traceback = sys.exc_info()[2]
             exceptions.append(e)
     for exception in exceptions[:-1]:
-        print(exception, file=sys.stderr)
-    raise exceptions[-1]
+        traceback.print_exception(exception, None, exception.traceback)
+    raise exceptions[-1], None, exceptions[-1].traceback
 
-def _random_name_subtype(url, type):
+def _random_name_subtype(url, main_type):
     with pool.get_driver() as phantomJS:
-        phantomJS.implicitly_wait(0.5)
         try:
-            if re.sub(r'#.*$', '', phantomJS.current_url) != url:
-                phantomJS.get(url)
+            phantomJS.implicitly_wait(0.5)
+            phantomJS.get(url)
     
             nameGen = phantomJS.find_element_by_id('nameGen')
             buttons = nameGen.find_elements_by_tag_name('input')
@@ -153,13 +157,19 @@ def _random_name_subtype(url, type):
             names = phantomJS.find_element_by_id('result').text
             names = [name.strip() for name in re.split(r'[\r\n]+', names)]
             names = [string.capwords(name) for name in names if name]
+            
             return (random.choice(names), subtype)
-        except selenium.common.exceptions.WebDriverException as e:
+        except (
+            selenium.common.exceptions.WebDriverException,
+            httplib.HTTPException,
+            IOError,
+        ) as exc:
+            exc_traceback = sys.exc_info()[2]
             try:
                 debug_file = 'fantasynamegenerators.error.htm'
                 with open(debug_file, 'w') as file:
                     file.write(phantomJS.page_source.encode('utf8'))
             except IOError:
-                traceback.print_exc()
                 debug_file = None
-            raise NameGenerationException(type, url, debug_file, phantomJS, e)
+            new_exc = NameGenerationException(main_type, url, debug_file, phantomJS, exc)
+            raise new_exc, None, exc_traceback

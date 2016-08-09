@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python2.7
 
 import sys
 import os.path
@@ -11,8 +11,8 @@ try:
     while True:
         dungeon_galaxy.Char.new_random().print_lines()
         if '--auto' in sys.argv[1:]:
-            print '---'
             time.sleep(10)
+            print '---'
         else:
             raw_input()
 except KeyboardInterrupt:

@@ -36,7 +36,7 @@ class Item(base.Item, util.Registry):
     pass
 
 class Item_Uses(Item, util.AbstractSubRegistry):
-    __slots__ = 'default_uses', 'uses_per_weight'
+#    __slots__ = 'default_uses', 'uses_per_weight'
     def __init__(self, uses=None, *args, **kwds):
         if uses is None:
             uses = self.default_uses
@@ -166,7 +166,7 @@ class Race_Human(Race):
             char.gender = random.choice(['male', 'female'])
 
 class Move_Human(base.Move):
-    __slots__ = 'extra_move'
+#    __slots__ = 'extra_move'
     def __init__(self):
         super(Move_Human, self).__init__('Human', 'Take a starting move '
             'from a class nobody else is playing, or a level 2-5 advanced move '
@@ -293,7 +293,7 @@ class Race_Shifter(Race_Alien):
         self.racial_move = Move_Shifter.new_random(char)
 
 class Move_Shifter(base.Move): 
-    __slots__ = 'shift_condition', 'shift_race'
+#    __slots__ = 'shift_condition', 'shift_race'
     def __init__(self):
         super(Move_Shifter, self).__init__('Shifter', 'Your race has '
             'evolved to shift uncontrollably into an almost completely '
@@ -323,7 +323,7 @@ class Race_Parasitic(Race_Alien):
     
 #===============================================================================
 class Class(base.Class, util.Registry):
-    __slots__ = 'base_load', 'base_hp', 'base_damage'
+#    __slots__ = 'base_load', 'base_hp', 'base_damage'
     def apply(self, char):
         char.max_load += self.base_load + char.abilities.modifiers['strength']
         char.max_hp += self.base_hp + char.abilities.scores['constitution']
@@ -337,7 +337,7 @@ class Class(base.Class, util.Registry):
         raise NotImplementedError
 
 class Move_Multiclass(base.Move_Class):
-    __slots__ = 'multiclass_move'
+#    __slots__ = 'multiclass_move'
     def set_random(self, char):
         wrapped_char = util.Wrapper(char, level=char.level-1)
         self.multiclass_move = random.choice([
